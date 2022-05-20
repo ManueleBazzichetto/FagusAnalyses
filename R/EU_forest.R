@@ -245,17 +245,6 @@ set.seed(17292)
 Fag.pres.tr.ts <- UEsampling::uesampling(sdf = EU_Fag.pres, grid.res = Optres_Eu$Opt_res,
                                          n.tr = 100, sub.ts = T, n.ts = 100, plot_proc = T)
 
-#prova 1
-#set.seed(101)
-#Fag.pres.tr.ts.pr1 <- UEsampling::uesampling(sdf = EU_Fag.pres, grid.res = Optres_Eu$Opt_res,
-#                                             n.tr = 100, sub.ts = T, n.ts = 100, plot_proc = T)
-#prova 2
-#set.seed(101)
-#Fag.pres.tr.ts.pr2 <- UEsampling::uesampling(sdf = EU_Fag.pres, grid.res = Optres_Eu$Opt_res,
-#                                             n.tr = 100, sub.ts = T, n.ts = 100, plot_proc = T)
-
-#identical(Fag.pres.tr.ts.pr1, Fag.pres.tr.ts.pr2)
-
 #count number of training and testing presences for country
 table(Fag.pres.tr.ts$Bkg.tr$COUNTRY)
 table(Fag.pres.tr.ts$Bkg.ts$COUNTRY)
@@ -396,7 +385,7 @@ car::marginalModelPlots(Mod_FagusEU.3) #fitted model seems much more adequate
 #GLM predictive performance
 
 #1) within-sample cross-validation
-#set seed for reproducibility, however results are consinstent across replicates
+#set seed for reproducibility, however results are consistent across replicates
 set.seed(23888)
 CV.GLM <- colMeans(cross_val(df = FagusEU_data$Tr_data, pa_col = "PA", formula = formula(Mod_FagusEU.3),
                    mod_type = "GLM", folds = 5L))
