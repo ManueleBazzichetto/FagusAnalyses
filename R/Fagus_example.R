@@ -1,15 +1,15 @@
-# Code for the analyses of Fagus sylvatica: an example on how to use the USE package to uniformly sample
-#background points within the environmental space
+# Code for the analyses of Fagus sylvatica: an example about how to use the USE package to uniformly sample
+# pseudo-absences within the environmental space
 # Author: Manuele Bazzichetto, Daniele Da Re
-# Date: May, 20th, 2023
-# manuele.bazzichetto@gmail.com
+# Date: June, 16th, 2023
+# For inquiries about the analyses presented below contact manuele.bazzichetto@gmail.com
 
 #R libraries
 #handle spatial data
 library(sf)
 library(terra)
 library(raster)
-library(geodata) #to download climatic data
+#library(geodata) #as an alternative to using raster::getData to download climatic data
 #plot data
 library(mapview)
 library(ggplot2)
@@ -29,7 +29,7 @@ library(parallel)
 
 #Some important info:
 
-#1) to-install USE from GitHub repo - last instal.: May, 20th 2023
+#1) to-install USE from GitHub repo - last instal.: June, 16th 2023 (version 0.1.1.)
 #devtools::install_github("danddr/USE")
 
 #2) data for replicating the analyses can be found at the following sources:
@@ -38,18 +38,18 @@ library(parallel)
 #EU-Forest -> https://figshare.com/articles/dataset/Occurrences_location_shapefile/3497891?backTo=/collections/A_high-resolution_pan-European_tree_occurrence_dataset/3288407
 
 ##Get climatic data -------------------------------------------------------------
-#2.5 (degrees at the Equator) resolution. Date of last download: May, 20th (2023)
+#2.5 (degrees at the Equator) resolution. Date of last download: June, 16th (2023)
 #BioClimateData <- geodata::worldclim_global(var = 'bio', res = 2.5, path = "~/Documents/UEsampling/CleanCode/worldclim_cleancode/") #here, put a directory where to store climatic data
-BioClimateData <- raster::getData(name = "worldclim", download = T, res = 2.5, var = "bio", path = "~/Documents/UEsampling/CleanCode/worldclim_cleancode/")
+BioClimateData <- raster::getData(name = "worldclim", download = T, res = 2.5, var = "bio", path = "~/Documents/UEsampling/CleanCode/worldclim_cleancode/") #last download: June, 16th (2023)
 
 class(BioClimateData)
 
 BioClimateData <- as(BioClimateData, "SpatRaster")
 
-crs(BioClimateData)
+crs(BioClimateData, proj = T)
 
 #crop and mask BioClimateData to cover the area of interest (i.e. Italy, France, Spain)
-#bbox used for cropping World allows first getting rid of France's out of seas territories - French Guyana?
+#bbox used for cropping World allows first getting rid of France's out of seas territories (e.g., French Guiana)
 data("World")
 st_crs(World) #EPSG:4326
 
@@ -102,9 +102,9 @@ clusterEvalQ(cr7, library(sf))
 Optres_Eu <- optimRes(sdf = PCstack.sp, grid.res = seq(1, 15), cr = cr7, showOpt = T)
 
 ##Get Fagus sylvatica data from sPlot ------------------------------------------ 
-#notice that these data will be used as a supplementary testing dataset to assess the
-#predictive performance of modelling tools calibrated on occurrence (presence/background points) data of Fagus s.
-#sampled using the uniform sampling approach
+#note that these data will be used as a supplementary testing dataset to assess the
+#predictive performance of modelling algorithms (GLM and Random Forest) calibrated on Fagus sylvatica occurrence (presences/pseudo-absences) data
+#sampled using the uniform environmental sampling approach
 
 #import sPlotOpen matrices from sPlotOpen.RData
 #all matrices + an R function for automatically generating a list of data references will be imported
@@ -150,7 +150,7 @@ nrow(header.IFS.R1[header.IFS.R1$PlotObservationID %in% Fagus_DT2$PlotObservatio
 #create a dataframe with sPlot data for Fagus sylvatica from Italy, France and Spain
 Fagus.sPlot <- header.IFS.R1[header.IFS.R1$PlotObservationID %in% Fagus_DT2$PlotObservationID, ]
 
-#add a PA (presence/absence) column and get rid of information that will not be used
+#add a PA (presence/absence) column and get rid of information (e.g., columns) that will not be used
 Fagus.sPlot$PA <- 1
 Fagus.sPlot <- Fagus.sPlot[c("PA", "Longitude", "Latitude")]
 
@@ -210,8 +210,8 @@ EU_F_IFS.Fag.geo <- st_transform(EU_forest.IFS.Fag.sp, crs = 4326)
 mapview(raster(BioClimateData.Eu[[1]])) + mapview(EU_F_IFS.Fag.geo, zcol = "COUNTRY")
 
 #there are 12.444 obs for Fagus sylvatica (presences)
-#uniformSampling (from USE) will be used to subset both presences and absences within the env. space
-#the same will be done for getting testing presences and absences
+#uniformSampling (from USE) will be used to subset both presences and pseudo-absences within the env. space
+#the same will be done for getting testing presences and pseudo-absences
 
 ##Subset presences within the environmental space with uniformSampling --------------
 
@@ -242,7 +242,7 @@ EU_Fag.pres <- st_as_sf(na.omit(EU_Fag.pres), coords = c("PC1", "PC2"))
 #subset presences using uniformSampling
 #100 presences will be (whenever possible) sampled from each cell of the sampling grid
 #same thing will be done to sample testing presences
-set.seed(17292)
+set.seed(17534)
 Fag.pres.tr.ts <- USE::uniformSampling(sdf = EU_Fag.pres, grid.res = Optres_Eu$Opt_res,
                                          n.tr = 100, sub.ts = T, n.ts = 100, plot_proc = T)
 
@@ -261,18 +261,25 @@ Fag.pres.tr.ts.sp <- lapply(Fag.pres.tr.ts, function(x) {
 
 mapview(raster(PCstack[[1]])) + mapview(Fag.pres.tr.ts.sp$obs.tr, color = "blue") + mapview(Fag.pres.tr.ts.sp$obs.ts, color = "red")
 
-#subset absences using paSampling
-#here we use all available presences (12.444) to safely exclude all absences located in areas
-#of the environmental space where conditions may actually be suitable for Fagus sylvatica (presences)
-#however, as we want prevalence to be = 1, we set the prev arg as if we were using Fag.pres.tr.ts$obs.tr
-#(so if we had 1827 presences)
+##Get pseudo-absences within the environmental space with paSampling --------------
 
-set.seed(17387)
-12444/(nrow(Fag.pres.tr.ts$obs.tr)) #our prevalence is 6.811166
+#get pseudo-absences using paSampling
+#here we use all Fagus s. presences (12.444 - 171 NAs for PC1 and PC2) to inform the kernel-based filter, so that we can use all information available about locations suitable for the species
+#this will allow us safely excluding as many pseudo-absences located in areas of the environmental space where conditions may actually be suitable for Fagus sylvatica (presences) as possible
+#however, as we want prevalence to be = 1 in the training set, we set the prev arg as if we were using Fag.pres.tr.ts$obs.tr
+#(so if we had 1.827 presences)
+#basically we 'inflate' prevalence so that we can finally get a number of pseudo-absences comparable with Fag.pres.tr.ts$obs.tr
 
+(12444-171)/(nrow(Fag.pres.tr.ts$obs.tr)) #our prevalence is 6.71757
+
+all.equal(which(is.na(EU_F_IFS.Fag.geo$PC1)), which(is.na(EU_F_IFS.Fag.geo$PC2)))
+
+EU_F_IFS.Fag.geo <- EU_F_IFS.Fag.geo[-which(is.na(EU_F_IFS.Fag.geo$PC1)), ]
+
+set.seed(17893)
 Fag.abs.UE <- USE::paSampling(env.rast = BioClimateData.Eu,
-                                      pres = as(EU_F_IFS.Fag.geo, "Spatial"), n.tr = 20,
-                                      grid.res = Optres_Eu$Opt_res, prev = 6.811166,
+                                      pres = EU_F_IFS.Fag.geo, n.tr = 20,
+                                      grid.res = Optres_Eu$Opt_res, prev = 6.71757,
                                       sub.ts = T, n.ts = 150, plot_proc = T)
 
 #make training and testing (absence) datasets spatial 
@@ -331,8 +338,7 @@ Vars_to_remove <- caret::findCorrelation(cor(FagusEU_data$Tr_data[-c(1, 2, 3, 4)
 paste0("bio", seq_len(19))[!paste0("bio", seq_len(19)) %in% Vars_to_remove]
 #bio 6: min. temperature of the coldest month;
 #bio 7: temperature annual range;
-#bio 8: mean temperature wettest quarter;
-#bio 19: precipitation of coldest quarter.
+#bio 8: mean temperature wettest quarter.
 
 #get rid of correlated variables from training and testing datasets
 FagusEU_data <- lapply(FagusEU_data, function(x) {
@@ -353,10 +359,9 @@ ggarrange(plotlist = lapply(colnames(FagusEU_data$Tr_data[-c(1, 2, 3, 4)]), func
 hist(FagusEU_data$Tr_data$bio6, xlab = "bio6", main = NULL)
 hist(FagusEU_data$Tr_data$bio7, xlab = "bio7", main = NULL)
 hist(FagusEU_data$Tr_data$bio8, xlab = "bio8", main = NULL)
-hist(FagusEU_data$Tr_data$bio8, xlab = "bio19", main = NULL)
 
 #binary Generalized Linear Model
-Mod_FagusEU <- glm(PA ~ bio6 + bio7 + bio8 + bio19 + lat, family = binomial, data = FagusEU_data$Tr_data)
+Mod_FagusEU <- glm(PA ~ bio6 + bio7 + bio8 + lat, family = binomial, data = FagusEU_data$Tr_data)
 
 car::S(Mod_FagusEU) #Wald's test
 car::Anova(Mod_FagusEU) #Likelihood ratio test
@@ -369,19 +374,19 @@ car::influenceIndexPlot(Mod_FagusEU)
 car::outlierTest(Mod_FagusEU)
 
 #introduce 2nd order polynomials for variables
-Mod_FagusEU.2 <- glm(PA ~ poly(bio6, 2) + poly(bio7, 2) + poly(bio8, 2) + poly(bio19, 2) +
+Mod_FagusEU.2 <- glm(PA ~ poly(bio6, 2) + poly(bio7, 2) + poly(bio8, 2) +
                        poly(lat, 2), 
                      family = binomial, data = FagusEU_data$Tr_data)
 
 
 car::S(Mod_FagusEU.2)
 
-#compare nested model without poly for bio7, bio8 and lat
-anova(glm(PA ~ poly(bio6, 2) + bio7 + bio8 + poly(bio19, 2) + lat, 
+#compare nested model without poly for bio8
+anova(glm(PA ~ poly(bio6, 2) + poly(bio7, 2) + bio8 + poly(lat, 2), 
           family = binomial, data = FagusEU_data$Tr_data), Mod_FagusEU.2, test = "Chisq")
 
-#get rid of second-order term for for bio7, bio8 and lat
-Mod_FagusEU.3 <- glm(PA ~ poly(bio6, 2) + bio7 + bio8 + poly(bio19, 2) + lat, 
+#get rid of second-order term for for bio8
+Mod_FagusEU.3 <- glm(PA ~ poly(bio6, 2) + poly(bio7, 2) + bio8 + poly(lat, 2), 
                      family = binomial, data = FagusEU_data$Tr_data)
 
 car::marginalModelPlots(Mod_FagusEU.3) #fitted model seems much more adequate
@@ -390,7 +395,7 @@ car::marginalModelPlots(Mod_FagusEU.3) #fitted model seems much more adequate
 
 #1) within-sample cross-validation
 #set seed for reproducibility (although results are consistent across CV replicates)
-set.seed(23888)
+set.seed(23635)
 CV.GLM <- colMeans(cross_val(df = FagusEU_data$Tr_data, pa_col = "PA", formula = formula(Mod_FagusEU.3),
                    mod_type = "GLM", folds = 5L))
 
@@ -407,14 +412,17 @@ sPlot.boyce_ind <- ecospat.boyce(fit = sPlot.fitted, obs = sPlot.fitted[which(Fa
                                  window.w = "default", res = 100, PEplot = F)$Spearman.cor #check later details args
 
 #goodness-of-fit
-performance::model_performance(Mod_FagusEU.3) #Tjur's R2 = 0.339
-(Mod_FagusEU.3$null.deviance - Mod_FagusEU.3$deviance)/Mod_FagusEU.3$null.deviance #Deviance-based  R2 0.29
+performance::model_performance(Mod_FagusEU.3) #Tjur's R2 = 0.355
+(Mod_FagusEU.3$null.deviance - Mod_FagusEU.3$deviance)/Mod_FagusEU.3$null.deviance #Deviance-based  R2 0.3
 #same as Deviance-based R2
-modEvA::Dsquared(Mod_FagusEU.3) #0.29
+modEvA::Dsquared(Mod_FagusEU.3) #0.3
 
 # Random Forest
 #for multicollinearity issues see: https://stats.stackexchange.com/questions/141619/wont-highly-correlated-variables-in-random-forest-distort-accuracy-and-feature
-RF_FagusEU <- ranger::ranger(formula = PA ~  bio6 + bio7 + bio8 + bio19 + lat,
+
+set.seed(45372)
+
+RF_FagusEU <- ranger::ranger(formula = PA ~  bio6 + bio7 + bio8 + lat,
                                importance = 'permutation',
                                data = FagusEU_data$Tr_data)
 
@@ -426,7 +434,7 @@ hist(predict(object = RF_FagusEU, data = FagusEU_data$Tr_data, type = "response"
 
 #RF predictive performance
 #1) within-sample cross-validation
-set.seed(17601)
+set.seed(89347)
 CV.RF <- colMeans(cross_val(df = FagusEU_data$Tr_data, pa_col = "PA", formula = formula(RF_FagusEU),
                    mod_type = "RF", folds = 5L, importance = "permutation"))
 
@@ -443,7 +451,7 @@ sPlot.boyce_ind.RF <- ecospat.boyce(fit = sPlot.fitted.RF, obs = sPlot.fitted.RF
                                   window.w = "default", res = 100, PEplot = F)$Spearman.cor #check later details args
 
 #goodness-of-fit
-RF_FagusEU$r.squared #0.56
+RF_FagusEU$r.squared #0.66
 
 ##Maps of predicted prob. of occurrence ----------------------------------------
 
